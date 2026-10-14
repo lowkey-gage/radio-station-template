@@ -19,6 +19,7 @@ if (!defined('ABSPATH')) {
 
 function radio_station_register_post_types() {
 
+    // Register Shows
     register_post_type('shows', array(
         'labels' => array(
             'name' => 'Shows',
@@ -41,6 +42,7 @@ function radio_station_register_post_types() {
         )
     ));
 
+    // Register DJs
     register_post_type('djs', array(
         'labels' => array(
             'name' => 'DJs',
@@ -65,6 +67,42 @@ function radio_station_register_post_types() {
 }
 
 add_action('init', 'radio_station_register_post_types');
+
+
+/*
+|--------------------------------------------------------------------------
+| REGISTER SHOW CATEGORIES
+|--------------------------------------------------------------------------
+*/
+
+function radio_station_register_show_categories() {
+
+    $labels = array(
+        'name' => 'Show Categories',
+        'singular_name' => 'Show Category',
+        'search_items' => 'Search Show Categories',
+        'all_items' => 'All Show Categories',
+        'edit_item' => 'Edit Show Category',
+        'update_item' => 'Update Show Category',
+        'add_new_item' => 'Add New Show Category',
+        'new_item_name' => 'New Show Category Name',
+        'menu_name' => 'Show Categories'
+    );
+
+    register_taxonomy('show_category', array('shows'), array(
+        'labels' => $labels,
+        'hierarchical' => true,
+        'public' => true,
+        'show_ui' => true,
+        'show_admin_column' => true,
+        'show_in_rest' => true,
+        'rewrite' => array(
+            'slug' => 'show-category'
+        )
+    ));
+}
+
+add_action('init', 'radio_station_register_show_categories');
 
 
 /*
@@ -939,4 +977,127 @@ function radio_station_display_show_details($content) {
 add_filter(
     'the_content',
     'radio_station_display_show_details'
+);
+
+function radio_station_display_dj_shows($content) {
+
+    // Only display on individual DJ pages
+    if (
+        !is_singular('djs') ||
+        !in_the_loop() ||
+        !is_main_query()
+    ) {
+        return $content;
+    }
+
+    $dj_id = get_the_ID();
+
+    // Retrieve published shows
+    $shows = get_posts(array(
+        'post_type' => 'shows',
+        'posts_per_page' => -1,
+        'post_status' => 'publish'
+    ));
+
+    $related_shows = array();
+
+    foreach ($shows as $show) {
+
+        // Get DJs assigned to this show
+        $assigned_djs = get_post_meta(
+            $show->ID,
+            '_show_djs',
+            true
+        );
+
+        if (!is_array($assigned_djs)) {
+            continue;
+        }
+
+        // Check whether this DJ hosts the show
+        if (in_array($dj_id, array_map('absint', $assigned_djs), true)) {
+            $related_shows[] = $show;
+        }
+    }
+
+    // Nothing to display
+    if (empty($related_shows)) {
+        return $content;
+    }
+
+    $output = '<div class="radio-station-dj-shows">';
+
+    $output .= '<h2>Shows Hosted By This DJ</h2>';
+
+    $output .= '<ul>';
+
+    foreach ($related_shows as $show) {
+
+        $show_url = get_permalink($show->ID);
+        $show_title = get_the_title($show->ID);
+
+        $output .= '<li>';
+
+        $output .= '<a href="' . esc_url($show_url) . '">';
+
+        $output .= esc_html($show_title);
+
+        $output .= '</a>';
+
+        $output .= '</li>';
+    }
+
+    $output .= '</ul>';
+
+    $output .= '</div>';
+
+    return $content . $output;
+}
+
+add_filter(
+    'the_content',
+    'radio_station_display_dj_shows'
+);
+
+function radio_station_display_show_categories($content) {
+
+    if (
+        !is_singular('shows') ||
+        !in_the_loop() ||
+        !is_main_query()
+    ) {
+        return $content;
+    }
+
+    $categories = get_the_terms(
+        get_the_ID(),
+        'show_category'
+    );
+
+    if (empty($categories) || is_wp_error($categories)) {
+        return $content;
+    }
+
+    $category_names = array();
+
+    foreach ($categories as $category) {
+        $category_names[] = esc_html($category->name);
+    }
+
+    $output = '<div class="radio-station-show-categories">';
+
+    $output .= '<p><strong>Categories:</strong> ';
+
+    $output .= implode(', ', $category_names);
+
+    $output .= '</p>';
+
+    $output .= '</div>';
+
+    return $output . $content;
+}
+
+add_filter(
+    'the_content',
+    'radio_station_display_show_categories'
 );
